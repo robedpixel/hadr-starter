@@ -1,0 +1,52 @@
+<main class="todo-app">
+  <h1>Todos</h1>
+
+  <form class="add-form" (ngSubmit)="add()">
+    <input
+      name="newTitle"
+      [(ngModel)]="newTitle"
+      placeholder="What needs to be done?"
+      autocomplete="off"
+    />
+    <button type="submit">Add</button>
+  </form>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  <ul class="todo-items">
+    @for (todo of todos(); track todo.id) {
+      <li [class.completed]="todo.completed">
+        @if (editingId() === todo.id) {
+          <form class="edit-form" (ngSubmit)="saveEdit(todo)">
+            <input name="editTitle" [(ngModel)]="editTitle" autocomplete="off" />
+            <button type="submit">Save</button>
+            <button type="button" (click)="cancelEdit()">Cancel</button>
+          </form>
+        } @else {
+          <label>
+            <input
+              type="checkbox"
+              [checked]="todo.completed"
+              (change)="toggle(todo)"
+            />
+            <span class="title">{{ todo.title }}</span>
+          </label>
+          <span class="actions">
+            <button type="button" (click)="startEdit(todo)">Edit</button>
+            <button type="button" class="danger" (click)="remove(todo)">
+              Delete
+            </button>
+          </span>
+        }
+      </li>
+    } @empty {
+      <li class="empty">Nothing to do yet — add your first todo above.</li>
+    }
+  </ul>
+
+  @if (todos().length > 0) {
+    <p class="counter">{{ remaining() }} of {{ todos().length }} remaining</p>
+  }
+</main>

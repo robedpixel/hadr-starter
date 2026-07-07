@@ -1,0 +1,101 @@
+.todo-app {
+  max-width: 480px;
+  margin: 3rem auto;
+  padding: 0 1rem;
+  font-family: system-ui, sans-serif;
+}
+
+h1 {
+  text-align: center;
+  font-weight: 600;
+}
+
+.add-form,
+.edit-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+input:not([type='checkbox']) {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+button {
+  padding: 0.4rem 0.9rem;
+  border: none;
+  border-radius: 6px;
+  background: #3f51b5;
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #32408f;
+}
+
+button.danger {
+  background: #c62828;
+}
+
+button.danger:hover {
+  background: #9e1f1f;
+}
+
+.error {
+  color: #c62828;
+}
+
+.todo-items {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+}
+
+.todo-items li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 0.25rem;
+  border-bottom: 1px solid #eee;
+}
+
+.todo-items label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.todo-items .title {
+  overflow-wrap: anywhere;
+}
+
+.todo-items li.completed .title {
+  text-decoration: line-through;
+  color: #999;
+}
+
+.todo-items li.empty {
+  justify-content: center;
+  color: #999;
+}
+
+.actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.counter {
+  margin-top: 1rem;
+  text-align: center;
+  color: #666;
+  font-size: 0.9rem;
+}
