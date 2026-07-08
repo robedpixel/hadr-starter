@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Interpretation, LlmProvider } from "../domain/types.js";
 
-const MODEL = "claude-opus-4-8";
+const DEFAULT_MODEL = "claude-opus-4-8";
 
 const SYSTEM = [
   "You interpret short chat messages sent to a personal Singapore parking bot.",
@@ -41,14 +41,19 @@ const TOOL: Anthropic.Tool = {
   },
 };
 
-/** Anthropic-backed intent classifier + destination extractor. */
-export function createAnthropicLlm(apiKey: string): LlmProvider {
+/**
+ * Anthropic-backed intent classifier + destination extractor.
+ *
+ * The base URL is read from ANTHROPIC_BASE_URL by the SDK. When pointing at a
+ * non-Anthropic gateway, pass the model id that gateway exposes (see config).
+ */
+export function createAnthropicLlm(apiKey: string, model: string = DEFAULT_MODEL): LlmProvider {
   const client = new Anthropic({ apiKey });
 
   return {
     async interpret(message: string): Promise<Interpretation> {
       const response = await client.messages.create({
-        model: MODEL,
+        model,
         max_tokens: 256,
         system: SYSTEM,
         tools: [TOOL],
