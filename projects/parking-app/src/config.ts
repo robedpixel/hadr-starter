@@ -3,6 +3,7 @@ import { DEFAULT_TUNING, type Config } from "./domain/types.js";
 export interface AppConfig {
   telegramBotToken: string;
   anthropicApiKey: string;
+  anthropicModel: string | undefined;
   ltaAccountKey: string;
   core: Config;
 }
@@ -31,6 +32,7 @@ export function loadConfig(): AppConfig {
   return {
     telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
     anthropicApiKey: required("ANTHROPIC_API_KEY"),
+    anthropicModel: process.env.ANTHROPIC_MODEL?.trim() || undefined,
     ltaAccountKey: required("LTA_ACCOUNT_KEY"),
     core: {
       ownerTelegramId,
