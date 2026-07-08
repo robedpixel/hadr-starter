@@ -41,9 +41,15 @@ const TOOL: Anthropic.Tool = {
   },
 };
 
-/** Anthropic-backed intent classifier + destination extractor. */
-export function createAnthropicLlm(apiKey: string): LlmProvider {
-  const client = new Anthropic({ apiKey });
+/**
+ * Anthropic-backed intent classifier + destination extractor.
+ *
+ * `baseUrl` optionally points the client at any Anthropic-API-compatible
+ * endpoint (a proxy, gateway, or self-hosted shim). When omitted, the SDK uses
+ * the default Anthropic API (or the `ANTHROPIC_BASE_URL` env var, if set).
+ */
+export function createAnthropicLlm(apiKey: string, baseUrl?: string): LlmProvider {
+  const client = new Anthropic({ apiKey, ...(baseUrl ? { baseURL: baseUrl } : {}) });
 
   return {
     async interpret(message: string): Promise<Interpretation> {
