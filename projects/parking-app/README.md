@@ -49,6 +49,10 @@ Credentials (all git-ignored, see `.env.example`):
 - `ANTHROPIC_API_KEY`
 - `LTA_ACCOUNT_KEY` — free [LTA DataMall](https://datamall.lta.gov.sg/) key
 
+Optional: `ANTHROPIC_BASE_URL` points the LLM client at any
+Anthropic-API-compatible endpoint (a proxy, gateway, or self-hosted shim);
+leave blank for the default Anthropic API.
+
 Optional tuning: `LOW_AVAILABILITY_PERCENT` (default `0.15`),
 `LOW_AVAILABILITY_FLOOR` (default `10`).
 

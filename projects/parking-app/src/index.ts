@@ -10,7 +10,7 @@ async function main() {
   const config = loadConfig();
 
   const providers: Providers = {
-    llm: createAnthropicLlm(config.anthropicApiKey),
+    llm: createAnthropicLlm(config.anthropicApiKey, config.anthropicBaseUrl),
     geocoder: createOneMapGeocoder(),
     carparks: createLtaCarparkProvider(config.ltaAccountKey),
   };
