@@ -29,6 +29,16 @@ export const SYSTEM = [
   '  {"intent": "parking_request"}',
 ].join("\n");
 
+/**
+ * Deliver the instructions in the USER turn rather than the `system` field.
+ * Some Anthropic->OpenAI gateway shims drop or ignore the system prompt for
+ * open models, so the model never sees the task; folding it into the user
+ * message sidesteps that.
+ */
+export function buildClassificationPrompt(message: string): string {
+  return `${SYSTEM}\n\nMessage to classify:\n"""${message}"""\n\nRespond with the JSON object now.`;
+}
+
 // Filler that precedes a destination in natural phrasing; stripped deterministically
 // so the geocoder query is just the place words. Longest-first so e.g.
 // "i want to go to" wins over "go to".
@@ -156,9 +166,8 @@ export function createAnthropicLlm(apiKey: string, model: string = DEFAULT_MODEL
 
       const response = await client.messages.create({
         model,
-        max_tokens: 64,
-        system: SYSTEM,
-        messages: [{ role: "user", content: message }],
+        max_tokens: 512, // headroom for models that emit reasoning before the JSON
+        messages: [{ role: "user", content: buildClassificationPrompt(message) }],
       });
 
       const text = response.content
