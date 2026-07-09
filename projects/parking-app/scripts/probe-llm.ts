@@ -6,7 +6,7 @@
 //   ANTHROPIC_MODEL=glm-5.2 \
 //   npx tsx scripts/probe-llm.ts
 import Anthropic from "@anthropic-ai/sdk";
-import { SYSTEM, parseInterpretation, quickClassify } from "../src/providers/llm.js";
+import { SYSTEM, extractDestinationText, parseIntent, quickClassify } from "../src/providers/llm.js";
 
 const model = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -37,9 +37,11 @@ for (const msg of MESSAGES) {
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("");
+    const intent = parseIntent(raw);
+    const destination = intent === "parking_request" ? extractDestinationText(msg) : "";
     console.log(`"${msg}"`);
-    console.log(`  raw   -> ${JSON.stringify(raw)}`);
-    console.log(`  parsed-> ${JSON.stringify(parseInterpretation(raw))}\n`);
+    console.log(`  raw    -> ${JSON.stringify(raw)}`);
+    console.log(`  intent -> ${intent}${destination ? `  destination -> ${JSON.stringify(destination)}` : ""}\n`);
   } catch (e: any) {
     console.log(`"${msg}"\n  ERROR -> ${e.status} ${e.error?.error?.message ?? e.message}\n`);
   }

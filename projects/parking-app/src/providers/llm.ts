@@ -3,40 +3,61 @@ import type { Interpretation, LlmProvider } from "../domain/types.js";
 
 const DEFAULT_MODEL = "claude-opus-4-8";
 
+type Intent = "parking_request" | "suggest_another" | "other";
+
+/**
+ * The model's ONLY job is intent. It does not extract or repeat the destination
+ * — that is derived deterministically (see extractDestinationText), so a weaker
+ * model can't mangle the place words. A smaller job is a more reliable job.
+ */
 export const SYSTEM = [
-  "You interpret short chat messages sent to a personal Singapore parking bot.",
-  "Classify each message into exactly one intent and, when it is a parking request,",
-  "extract the raw destination text the user named. You do NOT judge whether the",
-  "place is real, valid, or in Singapore — a geocoder handles that. Just pull out",
-  "the words that name where they want to go.",
+  "You classify short chat messages sent to a personal Singapore parking bot",
+  "into exactly one intent. You do NOT extract or repeat the destination — a",
+  "separate deterministic step handles that. Only choose the intent.",
   "",
   "Intents:",
-  "- parking_request: the user is telling you where they want to drive/park",
-  '  (e.g. "heading to Marina Bay Sands", "313 Somerset", "parking near 049483",',
-  '  "I want to go to the airport"). A message that is ONLY a place name, an',
-  '  address, or a bare 6-digit postal code (e.g. "049483") is still a',
-  "  parking_request — the user is naming a destination. Set destinationText to the",
-  '  place words only, stripped of filler like "take me to" / "parking near". For a',
-  "  bare place name / address / postal code, destinationText is the whole message.",
-  '- suggest_another: the user is asking for different/more options for the place',
-  '  already under discussion (e.g. "anything else?", "suggest another", "what else",',
-  '  "somewhere closer"). No destinationText.',
+  "- parking_request: the user is naming somewhere they want to drive to or park",
+  '  (a place name, address, or postal code) — e.g. "Jurong Point", "313 Somerset",',
+  '  "I want to go to Marina Bay Sands", "parking near VivoCity".',
+  "- suggest_another: the user is asking for different or more options for the",
+  '  place already under discussion — e.g. "anything else?", "suggest another",',
+  '  "what else", "somewhere closer".',
   "- other: greetings, chit-chat, or anything that is not a destination or a",
   "  request for more options.",
   "",
-  "Reply with ONLY a single JSON object and nothing else — no explanation and no",
-  "markdown code fences. Use exactly this shape:",
-  '  {"intent": "parking_request", "destinationText": "<the place words>"}',
-  '  {"intent": "suggest_another"}',
-  '  {"intent": "other"}',
-  'Include the "destinationText" field only when intent is "parking_request".',
+  "Reply with ONLY a JSON object and nothing else — no prose, no markdown fences:",
+  '  {"intent": "parking_request"}',
 ].join("\n");
 
+// Filler that precedes a destination in natural phrasing; stripped deterministically
+// so the geocoder query is just the place words. Longest-first so e.g.
+// "i want to go to" wins over "go to".
+const FILLER_PREFIXES = [
+  "i want to go to",
+  "i wanna go to",
+  "i want to park at",
+  "i want to park near",
+  "i am going to",
+  "i'm going to",
+  "im going to",
+  "take me to",
+  "bring me to",
+  "navigate to",
+  "parking near",
+  "parking at",
+  "park near",
+  "park at",
+  "heading to",
+  "head to",
+  "going to",
+  "drive to",
+  "go to",
+].sort((a, b) => b.length - a.length);
+
 /**
- * Deterministic short-circuit for inputs we can classify without the model.
- * A bare 6-digit string is always a Singapore postal code (the geocoder still
- * validates it), so we never let a weaker model misread it as chit-chat.
- * Returns null when the message needs the model to interpret it.
+ * Deterministic short-circuit: a bare 6-digit string is always a Singapore
+ * postal code (the geocoder still validates it), so we never let the model
+ * misread it. Returns null when the message needs the model to classify intent.
  */
 export function quickClassify(message: string): Interpretation | null {
   const trimmed = message.trim();
@@ -44,6 +65,22 @@ export function quickClassify(message: string): Interpretation | null {
     return { intent: "parking_request", destinationText: trimmed };
   }
   return null;
+}
+
+/**
+ * Deterministically derive the geocoder query from a parking-request message:
+ * drop a leading filler phrase and trailing punctuation, leaving the place words.
+ */
+export function extractDestinationText(message: string): string {
+  let text = message.trim().replace(/[?!.,]+$/, "").trim();
+  const lower = text.toLowerCase();
+  for (const prefix of FILLER_PREFIXES) {
+    if (lower.startsWith(prefix + " ")) {
+      text = text.slice(prefix.length).trim();
+      break;
+    }
+  }
+  return text;
 }
 
 /**
@@ -82,39 +119,32 @@ function extractJsonObjects(text: string): string[] {
   return objects;
 }
 
-/** Interpret a model reply, tolerating code fences, reasoning, or stray prose. */
-export function parseInterpretation(text: string): Interpretation {
+/** Read just the intent from a model reply, tolerating code fences, reasoning, or prose. */
+export function parseIntent(text: string): Intent {
   const candidates = extractJsonObjects(text);
-
-  // Models put the final answer last, so scan from the end for the first object
-  // that carries a recognized intent.
+  // Models put the final answer last, so scan from the end for a recognized intent.
   for (let i = candidates.length - 1; i >= 0; i--) {
-    let parsed: { intent?: string; destinationText?: string };
     try {
-      parsed = JSON.parse(candidates[i]!);
+      const parsed = JSON.parse(candidates[i]!) as { intent?: string };
+      if (parsed.intent === "parking_request" || parsed.intent === "suggest_another" || parsed.intent === "other") {
+        return parsed.intent;
+      }
     } catch {
       continue;
     }
-
-    if (parsed.intent === "parking_request") {
-      const destinationText = parsed.destinationText?.trim();
-      if (destinationText) return { intent: "parking_request", destinationText };
-      continue; // parking_request with no destination — keep looking
-    }
-    if (parsed.intent === "suggest_another") return { intent: "suggest_another" };
-    if (parsed.intent === "other") return { intent: "other" };
   }
-  return { intent: "other" };
+  return "other";
 }
 
 /**
- * LLM-backed intent classifier + destination extractor.
+ * LLM-backed intent classifier. Destination resolution is deterministic: postal
+ * codes short-circuit here, and for other parking requests the place words are
+ * extracted deterministically and handed to the (OneMap) geocoder — the model
+ * never touches the destination text.
  *
- * The base URL is read from ANTHROPIC_BASE_URL by the SDK. Rather than forced
- * Anthropic tool use (which non-Anthropic gateways translate unreliably), this
- * asks for a plain JSON object and parses it, so it works across Claude and the
- * OpenAI-compatible open models some gateways expose. When pointing at such a
- * gateway, pass the model id that gateway exposes (see config).
+ * The base URL is read from ANTHROPIC_BASE_URL by the SDK. The reply is a plain
+ * JSON object (not forced tool use), so this works across Claude and the
+ * OpenAI-compatible open models some gateways expose.
  */
 export function createAnthropicLlm(apiKey: string, model: string = DEFAULT_MODEL): LlmProvider {
   const client = new Anthropic({ apiKey });
@@ -126,7 +156,7 @@ export function createAnthropicLlm(apiKey: string, model: string = DEFAULT_MODEL
 
       const response = await client.messages.create({
         model,
-        max_tokens: 256,
+        max_tokens: 64,
         system: SYSTEM,
         messages: [{ role: "user", content: message }],
       });
@@ -136,7 +166,13 @@ export function createAnthropicLlm(apiKey: string, model: string = DEFAULT_MODEL
         .map((b) => b.text)
         .join("");
 
-      return parseInterpretation(text);
+      const intent = parseIntent(text);
+      if (intent === "parking_request") {
+        const destinationText = extractDestinationText(message);
+        return destinationText ? { intent: "parking_request", destinationText } : { intent: "other" };
+      }
+      if (intent === "suggest_another") return { intent: "suggest_another" };
+      return { intent: "other" };
     },
   };
 }
