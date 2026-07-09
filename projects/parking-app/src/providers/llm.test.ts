@@ -35,6 +35,26 @@ describe("parseInterpretation", () => {
     expect(parseInterpretation('{"intent":"parking_request"}')).toEqual({ intent: "other" });
   });
 
+  it("finds the JSON object when reasoning around it also contains braces", () => {
+    const reply =
+      'The user wants to go somewhere {like a mall}, so this is a request:\n' +
+      '{"intent":"parking_request","destinationText":"Jurong Point"}';
+    expect(parseInterpretation(reply)).toEqual({ intent: "parking_request", destinationText: "Jurong Point" });
+  });
+
+  it("takes the final answer object when several are present", () => {
+    const reply =
+      'Example: {"intent":"other"}. My answer:\n{"intent":"parking_request","destinationText":"VivoCity"}';
+    expect(parseInterpretation(reply)).toEqual({ intent: "parking_request", destinationText: "VivoCity" });
+  });
+
+  it("preserves braces that appear inside the destination string", () => {
+    expect(parseInterpretation('{"intent":"parking_request","destinationText":"Block {A}"}')).toEqual({
+      intent: "parking_request",
+      destinationText: "Block {A}",
+    });
+  });
+
   it("falls back to other on unparseable or empty replies", () => {
     expect(parseInterpretation("no json here")).toEqual({ intent: "other" });
     expect(parseInterpretation('{"intent": broken')).toEqual({ intent: "other" });
