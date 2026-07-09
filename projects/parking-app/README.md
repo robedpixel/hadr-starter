@@ -16,9 +16,10 @@ A **runnable end-to-end bot**:
 - **Behavioural test suite** (`src/core/handleMessage.test.ts`) — all 13 PRD
   scenarios, with hand-written fakes for the three providers. No network, no
   credentials. **This is the guarantee of correctness.**
-- **Real providers** — Anthropic (intent + destination extraction via forced
-  tool use), OneMap (geocoding + Singapore validity), LTA DataMall (live
-  availability).
+- **Real providers** — Anthropic-compatible LLM (intent + destination
+  extraction via a plain JSON reply, so it works across Claude and the
+  OpenAI-compatible open models some gateways expose), OneMap (geocoding +
+  Singapore validity), LTA DataMall (live availability).
 - **grammY transport + entry point** — long-polling, owner whitelist, in-memory
   per-chat state.
 
