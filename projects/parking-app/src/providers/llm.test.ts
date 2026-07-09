@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseInterpretation, quickClassify } from "./llm.js";
+import { extractDestinationText, parseIntent, quickClassify } from "./llm.js";
 
 describe("quickClassify", () => {
   it("treats a bare 6-digit string as a postal-code parking request", () => {
@@ -18,26 +18,52 @@ describe("quickClassify", () => {
   });
 });
 
-describe("parseInterpretation", () => {
-  it("parses a clean parking_request object", () => {
-    expect(parseInterpretation('{"intent":"parking_request","destinationText":"Marina Bay Sands"}')).toEqual({
-      intent: "parking_request",
-      destinationText: "Marina Bay Sands",
-    });
+describe("extractDestinationText", () => {
+  it("returns a bare place name unchanged", () => {
+    expect(extractDestinationText("Jurong Point")).toBe("Jurong Point");
+    expect(extractDestinationText("313 Somerset")).toBe("313 Somerset");
+  });
+
+  it("strips a leading filler phrase, longest match first", () => {
+    expect(extractDestinationText("I want to go to Jurong Point")).toBe("Jurong Point");
+    expect(extractDestinationText("take me to Marina Bay Sands")).toBe("Marina Bay Sands");
+    expect(extractDestinationText("parking near VivoCity")).toBe("VivoCity");
+    expect(extractDestinationText("go to Changi Airport")).toBe("Changi Airport");
+  });
+
+  it("strips trailing punctuation and whitespace", () => {
+    expect(extractDestinationText("  heading to Bugis!  ")).toBe("Bugis");
+  });
+
+  it("does not strip a place that merely starts with filler letters", () => {
+    expect(extractDestinationText("Toa Payoh")).toBe("Toa Payoh"); // not "to " prefix
+  });
+});
+
+describe("parseIntent", () => {
+  it("reads a clean intent object", () => {
+    expect(parseIntent('{"intent":"parking_request"}')).toBe("parking_request");
+    expect(parseIntent('{"intent":"suggest_another"}')).toBe("suggest_another");
+    expect(parseIntent('{"intent":"other"}')).toBe("other");
   });
 
   it("tolerates markdown fences and surrounding prose", () => {
-    const reply = 'Sure!\n```json\n{"intent": "suggest_another"}\n```';
-    expect(parseInterpretation(reply)).toEqual({ intent: "suggest_another" });
+    expect(parseIntent('Sure!\n```json\n{"intent": "suggest_another"}\n```')).toBe("suggest_another");
   });
 
-  it("falls back to other when a parking_request has no destinationText", () => {
-    expect(parseInterpretation('{"intent":"parking_request"}')).toEqual({ intent: "other" });
+  it("finds the JSON object when reasoning around it also contains braces", () => {
+    const reply = "The user names a place {a mall}, so:\n{\"intent\":\"parking_request\"}";
+    expect(parseIntent(reply)).toBe("parking_request");
   });
 
-  it("falls back to other on unparseable or empty replies", () => {
-    expect(parseInterpretation("no json here")).toEqual({ intent: "other" });
-    expect(parseInterpretation('{"intent": broken')).toEqual({ intent: "other" });
-    expect(parseInterpretation("")).toEqual({ intent: "other" });
+  it("takes the final answer object when several are present", () => {
+    expect(parseIntent('Example: {"intent":"other"}. Answer:\n{"intent":"parking_request"}')).toBe("parking_request");
+  });
+
+  it("falls back to other on unparseable, empty, or unknown replies", () => {
+    expect(parseIntent("no json here")).toBe("other");
+    expect(parseIntent('{"intent": broken')).toBe("other");
+    expect(parseIntent("")).toBe("other");
+    expect(parseIntent('{"intent":"nonsense"}')).toBe("other");
   });
 });
