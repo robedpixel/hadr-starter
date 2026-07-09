@@ -13,8 +13,11 @@ const SYSTEM = [
   "Intents:",
   "- parking_request: the user is telling you where they want to drive/park",
   '  (e.g. "heading to Marina Bay Sands", "313 Somerset", "parking near 049483",',
-  '  "I want to go to the airport"). Set destinationText to the place words only,',
-  "  stripped of filler like \"take me to\" / \"parking near\".",
+  '  "I want to go to the airport"). A message that is ONLY a place name, an',
+  '  address, or a bare 6-digit postal code (e.g. "049483") is still a',
+  "  parking_request — the user is naming a destination. Set destinationText to the",
+  '  place words only, stripped of filler like "take me to" / "parking near". For a',
+  "  bare place name / address / postal code, destinationText is the whole message.",
   '- suggest_another: the user is asking for different/more options for the place',
   '  already under discussion (e.g. "anything else?", "suggest another", "what else",',
   '  "somewhere closer"). No destinationText.',
@@ -29,8 +32,22 @@ const SYSTEM = [
   'Include the "destinationText" field only when intent is "parking_request".',
 ].join("\n");
 
+/**
+ * Deterministic short-circuit for inputs we can classify without the model.
+ * A bare 6-digit string is always a Singapore postal code (the geocoder still
+ * validates it), so we never let a weaker model misread it as chit-chat.
+ * Returns null when the message needs the model to interpret it.
+ */
+export function quickClassify(message: string): Interpretation | null {
+  const trimmed = message.trim();
+  if (/^\d{6}$/.test(trimmed)) {
+    return { intent: "parking_request", destinationText: trimmed };
+  }
+  return null;
+}
+
 /** Pull the first JSON object out of a model reply, tolerating fences or stray prose. */
-function extractInterpretation(text: string): Interpretation {
+export function parseInterpretation(text: string): Interpretation {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start === -1 || end <= start) return { intent: "other" };
@@ -64,6 +81,9 @@ export function createAnthropicLlm(apiKey: string, model: string = DEFAULT_MODEL
 
   return {
     async interpret(message: string): Promise<Interpretation> {
+      const quick = quickClassify(message);
+      if (quick) return quick;
+
       const response = await client.messages.create({
         model,
         max_tokens: 256,
@@ -76,7 +96,7 @@ export function createAnthropicLlm(apiKey: string, model: string = DEFAULT_MODEL
         .map((b) => b.text)
         .join("");
 
-      return extractInterpretation(text);
+      return parseInterpretation(text);
     },
   };
 }
