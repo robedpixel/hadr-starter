@@ -6,7 +6,7 @@
 //   ANTHROPIC_MODEL=glm-5.2 \
 //   npx tsx scripts/probe-llm.ts
 import Anthropic from "@anthropic-ai/sdk";
-import { SYSTEM, extractDestinationText, parseIntent, quickClassify } from "../src/providers/llm.js";
+import { buildClassificationPrompt, extractDestinationText, parseIntent, quickClassify } from "../src/providers/llm.js";
 
 const model = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -29,9 +29,8 @@ for (const msg of MESSAGES) {
   try {
     const res = await client.messages.create({
       model,
-      max_tokens: 256,
-      system: SYSTEM,
-      messages: [{ role: "user", content: msg }],
+      max_tokens: 512,
+      messages: [{ role: "user", content: buildClassificationPrompt(msg) }],
     });
     const raw = res.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
