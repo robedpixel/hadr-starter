@@ -49,6 +49,15 @@ Credentials (all git-ignored, see `.env.example`):
 - `ANTHROPIC_API_KEY`
 - `LTA_ACCOUNT_KEY` — free [LTA DataMall](https://datamall.lta.gov.sg/) key
 
+Optional Anthropic overrides (leave blank for the defaults):
+
+- `ANTHROPIC_BASE_URL` — point the LLM client at an Anthropic-API-compatible
+  endpoint (proxy, gateway, or self-hosted shim). Read by the SDK from the
+  environment. Blank uses the default Anthropic API.
+- `ANTHROPIC_MODEL` — override the model id (default `claude-opus-4-8`). Set
+  this to a model your gateway exposes when you point `ANTHROPIC_BASE_URL` at
+  one that doesn't serve the default.
+
 Optional tuning: `LOW_AVAILABILITY_PERCENT` (default `0.15`),
 `LOW_AVAILABILITY_FLOOR` (default `10`).
 
