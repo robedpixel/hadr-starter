@@ -3,7 +3,7 @@ import type { Interpretation, LlmProvider } from "../domain/types.js";
 
 const DEFAULT_MODEL = "claude-opus-4-8";
 
-const SYSTEM = [
+export const SYSTEM = [
   "You interpret short chat messages sent to a personal Singapore parking bot.",
   "Classify each message into exactly one intent and, when it is a parking request,",
   "extract the raw destination text the user named. You do NOT judge whether the",
@@ -46,24 +46,64 @@ export function quickClassify(message: string): Interpretation | null {
   return null;
 }
 
-/** Pull the first JSON object out of a model reply, tolerating fences or stray prose. */
+/**
+ * Extract every top-level {...} object from text, ignoring braces inside strings.
+ * Weaker models often wrap the answer in reasoning or prose that itself contains
+ * braces, so a naive first-`{`-to-last-`}` slice fails — we scan for balanced
+ * objects instead.
+ */
+function extractJsonObjects(text: string): string[] {
+  const objects: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}" && depth > 0) {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        objects.push(text.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+  return objects;
+}
+
+/** Interpret a model reply, tolerating code fences, reasoning, or stray prose. */
 export function parseInterpretation(text: string): Interpretation {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end <= start) return { intent: "other" };
+  const candidates = extractJsonObjects(text);
 
-  let parsed: { intent?: string; destinationText?: string };
-  try {
-    parsed = JSON.parse(text.slice(start, end + 1));
-  } catch {
-    return { intent: "other" };
-  }
+  // Models put the final answer last, so scan from the end for the first object
+  // that carries a recognized intent.
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    let parsed: { intent?: string; destinationText?: string };
+    try {
+      parsed = JSON.parse(candidates[i]!);
+    } catch {
+      continue;
+    }
 
-  if (parsed.intent === "parking_request") {
-    const destinationText = parsed.destinationText?.trim();
-    return destinationText ? { intent: "parking_request", destinationText } : { intent: "other" };
+    if (parsed.intent === "parking_request") {
+      const destinationText = parsed.destinationText?.trim();
+      if (destinationText) return { intent: "parking_request", destinationText };
+      continue; // parking_request with no destination — keep looking
+    }
+    if (parsed.intent === "suggest_another") return { intent: "suggest_another" };
+    if (parsed.intent === "other") return { intent: "other" };
   }
-  if (parsed.intent === "suggest_another") return { intent: "suggest_another" };
   return { intent: "other" };
 }
 
