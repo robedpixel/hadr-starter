@@ -20,32 +20,44 @@ const SYSTEM = [
   '  "somewhere closer"). No destinationText.',
   "- other: greetings, chit-chat, or anything that is not a destination or a",
   "  request for more options.",
+  "",
+  "Reply with ONLY a single JSON object and nothing else — no explanation and no",
+  "markdown code fences. Use exactly this shape:",
+  '  {"intent": "parking_request", "destinationText": "<the place words>"}',
+  '  {"intent": "suggest_another"}',
+  '  {"intent": "other"}',
+  'Include the "destinationText" field only when intent is "parking_request".',
 ].join("\n");
 
-const TOOL: Anthropic.Tool = {
-  name: "record_interpretation",
-  description: "Record the interpreted intent of the user's message.",
-  input_schema: {
-    type: "object",
-    properties: {
-      intent: {
-        type: "string",
-        enum: ["parking_request", "suggest_another", "other"],
-      },
-      destinationText: {
-        type: "string",
-        description: "The place the user named, when intent is parking_request. Omit otherwise.",
-      },
-    },
-    required: ["intent"],
-  },
-};
+/** Pull the first JSON object out of a model reply, tolerating fences or stray prose. */
+function extractInterpretation(text: string): Interpretation {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end <= start) return { intent: "other" };
+
+  let parsed: { intent?: string; destinationText?: string };
+  try {
+    parsed = JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return { intent: "other" };
+  }
+
+  if (parsed.intent === "parking_request") {
+    const destinationText = parsed.destinationText?.trim();
+    return destinationText ? { intent: "parking_request", destinationText } : { intent: "other" };
+  }
+  if (parsed.intent === "suggest_another") return { intent: "suggest_another" };
+  return { intent: "other" };
+}
 
 /**
- * Anthropic-backed intent classifier + destination extractor.
+ * LLM-backed intent classifier + destination extractor.
  *
- * The base URL is read from ANTHROPIC_BASE_URL by the SDK. When pointing at a
- * non-Anthropic gateway, pass the model id that gateway exposes (see config).
+ * The base URL is read from ANTHROPIC_BASE_URL by the SDK. Rather than forced
+ * Anthropic tool use (which non-Anthropic gateways translate unreliably), this
+ * asks for a plain JSON object and parses it, so it works across Claude and the
+ * OpenAI-compatible open models some gateways expose. When pointing at such a
+ * gateway, pass the model id that gateway exposes (see config).
  */
 export function createAnthropicLlm(apiKey: string, model: string = DEFAULT_MODEL): LlmProvider {
   const client = new Anthropic({ apiKey });
@@ -56,22 +68,15 @@ export function createAnthropicLlm(apiKey: string, model: string = DEFAULT_MODEL
         model,
         max_tokens: 256,
         system: SYSTEM,
-        tools: [TOOL],
-        tool_choice: { type: "tool", name: TOOL.name },
         messages: [{ role: "user", content: message }],
       });
 
-      const toolUse = response.content.find((b) => b.type === "tool_use");
-      if (!toolUse || toolUse.type !== "tool_use") return { intent: "other" };
+      const text = response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("");
 
-      const input = toolUse.input as { intent?: string; destinationText?: string };
-
-      if (input.intent === "parking_request") {
-        const text = input.destinationText?.trim();
-        return text ? { intent: "parking_request", destinationText: text } : { intent: "other" };
-      }
-      if (input.intent === "suggest_another") return { intent: "suggest_another" };
-      return { intent: "other" };
+      return extractInterpretation(text);
     },
   };
 }
